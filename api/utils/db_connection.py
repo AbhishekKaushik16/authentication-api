@@ -9,4 +9,4 @@ def get_engine(config):
         password=config.get("password"),
         dbname=config.get("dbname"),
     )
-    return create_engine(conn_str, pool_size=100, max_overflow=0, pool_pre_ping=False)
+    return create_engine(conn_str, pool_size=100, max_overflow=100, pool_pre_ping=False)

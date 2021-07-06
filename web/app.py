@@ -2,7 +2,8 @@ import logging
 
 from flask import request, jsonify, make_response
 from api.base.client import Client
-from api.models.user import register_user, login_user
+from api.models.user import register_user, login_user, update_user, delete_user, email_confirmed
+from api.utils.helpers import confirm_token
 from web.config import env, app
 from api.utils.logger import logger
 from web.decoraters import check_token
@@ -15,25 +16,44 @@ else:
 client = Client(env)
 
 
-@app.route("/account/register", methods=["POST"])
+@app.route("/accounts/register", methods=["POST"])
 def signup():
     data = request.get_json()
     body, code = register_user(client, data)
     return make_response(jsonify(body)), code
 
 
-@app.route("/account/login", methods=["POST"])
+@app.route("/accounts/login", methods=["POST"])
 def login():
     data = request.get_json()
     body, code = login_user(client, data)
     return make_response(jsonify(body)), code
 
 
+# TODO: an route for changing email, password
+@app.route('/accounts/update', methods=['PUT'])
+@check_token
+def update():
+    data = request.get_json()
+    body, code = update_user(client, data)
+    return make_response(jsonify(body)), code
+
+
 # TODO: an route for resetting password through email
-# TODO: an route for changing email
-# TODO: an route for changing password
-# TODO: an route for getting user data
-# TODO: an route to delete an account
+@app.route('/accounts/delete', methods=["DELETE"])
+@check_token
+def delete():
+    data = request.get_json()
+    body, code = delete_user(client, data)
+    return make_response(jsonify(body)), code
+
+
+@app.route('/confirm/<token>', methods=["GET"])
+# @check_token
+def confirm_email(token):
+    email = confirm_token(token)
+    body, code = email_confirmed(client, email)
+    return make_response(jsonify(body)), code
 
 
 @app.route("/<resource_name>/<_id>", methods=["GET"])
@@ -63,7 +83,6 @@ def add_user(resource_name):
         return jsonify({"message": "Successfully Inserted", "token": body["token"]})
 
 
-# TODO: an route for updating user profile
 @app.route('/<resource_name>', methods=['PUT'])
 @check_token
 def update_resource(resource_name):
