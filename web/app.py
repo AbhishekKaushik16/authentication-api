@@ -2,7 +2,9 @@ import logging
 
 from flask import request, jsonify, make_response
 from api.base.client import Client
-from api.models.user import register_user, login_user, update_user, delete_user, email_confirmed
+from api.models.user import register_user, login_user, update_user, delete_user, email_confirmed, get_user_by_email, \
+    reset_password
+from api.utils.email import send_password_change_mail, send_password_reset_link
 from api.utils.helpers import confirm_token
 from web.config import env, app
 from api.utils.logger import logger
@@ -47,6 +49,27 @@ def delete():
     body, code = delete_user(client, data)
     return make_response(jsonify(body)), code
 
+
+@app.route('/send-password-reset-email', methods=['POST'])
+@check_token
+def send_password_reset_mail():
+    data = request.get_json()
+    user = get_user_by_email(client, data)
+    body, code = send_password_change_mail(user)
+    return make_response(jsonify(body)), code
+
+
+@app.route('/password-reset/<token>', methods=['POST'])
+def password_reset(token):
+    data = dict(request.form)
+    email = confirm_token(token)
+    body, code = reset_password(client, email, data)
+    return make_response(jsonify(body)), code
+
+@app.route('/password-reset-form/<token>', methods=['GET'])
+def password_reset_form(token):
+    email = confirm_token(token)
+    return send_password_reset_link(email)
 
 @app.route('/confirm/<token>', methods=["GET"])
 # @check_token

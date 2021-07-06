@@ -4,14 +4,13 @@ import os
 import datetime
 import bcrypt
 import uuid
-from flask import url_for, render_template
 from dotenv import load_dotenv
 from .base import base_object, userMixin
 from sqlalchemy import Column, Text, Boolean, Float
 
 from ..base.utils.utils import check_if_email_exists
-from ..utils.email import send_email
-from ..utils.helpers import get_current_time, generate_confirmation_token
+from ..utils.email import send_email_confirm_mail
+from ..utils.helpers import get_current_time
 
 load_dotenv()
 
@@ -31,7 +30,6 @@ class User(base_object, userMixin):
     lastLoginAt = Column(Text)
     createdAt = Column(Text)
     confirmedAt = Column(Text)
-
 
     def __init__(self, d: dict):
         self.name = d.get("name", None)
@@ -78,6 +76,56 @@ class User(base_object, userMixin):
             return "Invalid token. Please log in again."
 
 
+def get_user_by_email(client, post_data: dict):
+    session = client.session_factory()
+    client._set_schema(session)
+    if post_data.get('email', None):
+        user = session.query(User).filter_by(email=post_data.get('email')).first()
+        return user
+    else:
+        return None
+
+def reset_password(client, email: str, post_data: dict):
+    session = client.session_factory()
+    client._set_schema(session)
+    try:
+        user = session.query(User).filter_by(email=email).first()
+        if user and bcrypt.checkpw(
+                post_data.get("oldPassword").encode("utf-8"), user.passwordHash.encode("utf-8")
+        ):
+            user.passwordHash = bcrypt.hashpw(
+                str(post_data.get("newPassword")).encode("utf-8"), bcrypt.gensalt()
+            ).decode("utf-8")
+            user.passwordUpdatedAt = datetime.datetime.utcnow().timestamp()
+            session.commit()
+            response_object = {
+                "status": "success",
+                "message": "Password reset.",
+                "id": user.email,
+            }
+            return response_object, 200
+        elif user is None:
+            response_object = {
+                "status": "fail",
+                "message": "Email is not correct.",
+            }
+            return response_object, 404
+        else:
+            response_object = {
+                "status": "fail",
+                "message": "Enter correct old password.",
+            }
+            return response_object, 400
+    except Exception as exc:
+        print(exc)
+        session.rollback()
+        response_object = {
+            "status": "fail",
+            "message": str(exc)
+        }
+        return response_object, 500
+
+
 def register_user(client, post_data):
     session = client.session_factory()
     client._set_schema(session)
@@ -90,11 +138,7 @@ def register_user(client, post_data):
             user.emailVerified = False
             session.add(user)
             session.commit()
-            token = generate_confirmation_token(user.email)
-            confirm_url = url_for('confirm_email', token=token, _external=True)
-            html = render_template('activate.html', confirm_url=confirm_url)
-            subject = "Please confirm your email"
-            send_email(user.email, subject, html)
+            send_email_confirm_mail(user)
             auth_token = user.encode_auth_token(hours=2)
             response_object = {
                 "status": "success",
